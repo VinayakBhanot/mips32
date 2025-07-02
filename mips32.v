@@ -78,3 +78,41 @@ always @(*) begin
 end
     
 endmodule
+
+module ALU (
+    input [31:0] rs_data, rt_data,
+    input [2:0] alu_op,
+    output reg [31:0] result,
+    output reg zero
+);
+
+reg signed [31:0] signed_rs, signed_rt;
+
+always @(rs_data,rt_data,alu_op) begin
+    signed_rs = rs_data; // signed version of rs_data
+    signed_rt = rt_data; // signed version of rt_data
+
+    case (alu_op)
+    3'b000: result = rs_data & rt_data;         // AND
+    3'b001: result = rs_data | rt_data;         // OR
+    3'b010: result = signed_rs + signed_rt;     // ADD
+    3'b110: result = signed_rs - signed_rt;     // SUB
+    3'b111: result = (signed_rs < signed_rt) ? 32'd1 : 32'd0; // SLT
+    default: $display("incorrect alu_op");
+    endcase
+
+    if (result == 0) begin
+        zero = 1'b1;
+    end else begin
+        zero = 1'b0;
+    end
+
+end
+    
+endmodule
+
+module control_unit (
+    
+);
+    
+endmodule
