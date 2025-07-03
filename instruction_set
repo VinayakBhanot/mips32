@@ -1,0 +1,13 @@
+| Instruction | Type | Opcode   | Funct (if R-type) | ALU Op | Notes                            |
+| ----------- | ---- | -------- | ----------------- | ------ | -------------------------------- |
+| `add`       | R    | `000000` | `100000`          | `010`  | Signed add                       |
+| `sub`       | R    | `000000` | `100010`          | `110`  | Signed sub                       |
+| `and`       | R    | `000000` | `100100`          | `000`  | Bitwise AND                      |
+| `or`        | R    | `000000` | `100101`          | `001`  | Bitwise OR                       |
+| `slt`       | R    | `000000` | `101010`          | `111`  | Set on less than                 |
+| `addi`      | I    | `001000` | N/A               | `010`  | Signed add with immediate        |
+| `ori`       | I    | `001101` | N/A               | `001`  | Bitwise OR with immediate        |
+| `lui`       | I    | `001111` | N/A               | `011`  | Load upper immediate (imm << 16) |
+| `lw`        | I    | `100011` | N/A               | `010`  | Load from memory                 |
+| `sw`        | I    | `101011` | N/A               | `010`  | Store to memory                  |
+| `beq`       | I    | `000100` | N/A               | `110`  | Branch on equal (`zero == 1`)    |

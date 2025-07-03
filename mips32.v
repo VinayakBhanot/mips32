@@ -95,8 +95,9 @@ always @(rs_data,rt_data,alu_op) begin
     case (alu_op)
     3'b000: result = rs_data & rt_data;         // AND
     3'b001: result = rs_data | rt_data;         // OR
-    3'b010: result = signed_rs + signed_rt;     // ADD
-    3'b110: result = signed_rs - signed_rt;     // SUB
+    3'b010: result = signed_rs + signed_rt;     // ADD / ADDI / LW / SW
+    3'b011: result = rt_data << 16;             // LUI
+    3'b110: result = signed_rs - signed_rt;     // SUB / BEQ
     3'b111: result = (signed_rs < signed_rt) ? 32'd1 : 32'd0; // SLT
     default: $display("incorrect alu_op");
     endcase
@@ -112,7 +113,80 @@ end
 endmodule
 
 module control_unit (
-    
+    input [5:0] funct, opcode,
+    input zero;
+    output reg sig_mem_read, sig_mem_write, sig_reg_write, sig_reg_dst, sig_alu_src, sig_mem_to_reg, sig_pc_src,
+    out reg [2:0] alu_op
 );
+
+always@(*) begin
+    sig_reg_dst     = 1'b0;
+    sig_reg_write   = 1'b0;
+    sig_alu_src     = 1'b0;
+    sig_mem_read    = 1'b0;
+    sig_mem_write   = 1'b0;
+    sig_mem_to_reg  = 1'b0;
+    sig_pc_src      = 1'b0;
+    alu_op          = 3'b000;
+
+    case (opcode)
+    6'b000000: begin  // R-Type
+        sig_reg_dst     = 1'b1;
+        sig_reg_write   = 1'b1;
+
+        case (funct)
+        6'b100000: alu_op = 3'b010; // add
+        6'b100010: alu_op = 3'b110; // sub
+        6'b100100: alu_op = 3'b000; // and
+        6'b100101: alu_op = 3'b001; // or
+        6'b101010: alu_op = 3'b111; // slt
+        default:   alu_op = 3'bxxx; // invalid funct 
+        endcase
+    end 
+
+    6'b100011: begin // lw
+        sig_reg_write  = 1'b1;
+        sig_alu_src    = 1'b1;
+        sig_mem_read   = 1'b1;
+        sig_mem_to_reg = 1'b1;
+        alu_op         = 3'b010; // add
+    end
+
+    6'b101011: begin // sw
+        sig_alu_src   = 1'b1;
+        sig_mem_write = 1'b1;
+        alu_op        = 3'b010; // add
+    end
+
+    6'b000100: begin // beq
+        sig_pc_src = zero; // only branch if ALU result is zero
+        alu_op     = 3'b110; // sub
+    end
+
+    6'b001000: begin // addi
+        sig_reg_write = 1'b1;
+        sig_alu_src   = 1'b1;
+        alu_op        = 3'b010; // add
+    end
+
+    6'b001101: begin // ori
+        sig_reg_write = 1'b1;
+        sig_alu_src   = 1'b1;
+        alu_op        = 3'b001; // or
+    end
+
+    6'b001111: begin // lui
+        sig_reg_write = 1'b1;
+        sig_alu_src   = 1'b1;
+        alu_op        = 3'b011; // imm << 16
+    end
+
+    default: begin
+        alu_op = 3'bxxx; // unsupported instruction
+    end
+    endcase
+
+
+end
     
 endmodule
