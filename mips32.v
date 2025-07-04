@@ -15,7 +15,7 @@ end
 
 always @(read_address)              // reflects whenever address changes
 begin
-    instruction =  instr_memory[read_address];          
+    instruction =  instr_memory[read_address >> 2];          
 end
 
 endmodule
@@ -37,14 +37,14 @@ end
 always @(read_address) 
 begin
     if (sig_mem_read) begin
-        read_data = data_memory[read_address];
+        read_data = data_memory[read_address >> 2];
     end
 end
 
 always @(posedge clk) 
 begin
     if (sig_mem_write) begin
-        data_memory[write_address] <= write_data;
+        data_memory[write_address >> 2] <= write_data;
         $writememb("data.mem", data_memory);
     end
 end
@@ -113,7 +113,7 @@ end
 endmodule
 
 module control_unit (
-    input [5:0] funct, opcode,
+    input [5:0] opcode, funct
     input zero,
     output reg sig_mem_read, sig_mem_write, sig_reg_write, sig_reg_dst, sig_alu_src, sig_mem_to_reg, sig_pc_src,
     output reg [2:0] alu_op
@@ -140,7 +140,7 @@ always@(*) begin
         6'b100100: alu_op = 3'b000; // and
         6'b100101: alu_op = 3'b001; // or
         6'b101010: alu_op = 3'b111; // slt
-        default:   default: begin
+        default:  begin
             $display("Warning: Unsupported R-type funct=%b", funct);
             alu_op = 3'b000;
         end
