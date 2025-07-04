@@ -1,7 +1,7 @@
 
 /*MEMORIES*/
 
-module instruction_mem (
+module instruction_memory (
     input [31:0] read_address,              // address from pc
     output reg [31:0] instruction       // teh instruction stored at the address
 );
@@ -20,7 +20,7 @@ end
 
 endmodule
 
-module data_mem (
+module data_memory (
     input clk,
     input [31:0] read_address, write_address, write_data,
     input sig_mem_read, sig_mem_write,
@@ -114,9 +114,9 @@ endmodule
 
 module control_unit (
     input [5:0] funct, opcode,
-    input zero;
+    input zero,
     output reg sig_mem_read, sig_mem_write, sig_reg_write, sig_reg_dst, sig_alu_src, sig_mem_to_reg, sig_pc_src,
-    out reg [2:0] alu_op
+    output reg [2:0] alu_op
 );
 
 always@(*) begin
@@ -140,7 +140,10 @@ always@(*) begin
         6'b100100: alu_op = 3'b000; // and
         6'b100101: alu_op = 3'b001; // or
         6'b101010: alu_op = 3'b111; // slt
-        default:   alu_op = 3'bxxx; // invalid funct 
+        default:   default: begin
+            $display("Warning: Unsupported R-type funct=%b", funct);
+            alu_op = 3'b000;
+        end
         endcase
     end 
 
@@ -182,11 +185,206 @@ always@(*) begin
     end
 
     default: begin
-        alu_op = 3'bxxx; // unsupported instruction
+    
+        $display("Warning: Unsupported instruction. opcode=%b funct=%b", opcode, funct);
+        alu_op = 3'b000; // Default to ADD or NO-OP to prevent undefined behavior
     end
     endcase
 
 
 end
     
+endmodule
+
+/* Helper Modules*/
+
+module mux5_2x1 (
+    input  [4:0] in_0, in_1,
+    input        control,
+    output [4:0] out
+);
+    assign out = control ? in_1 : in_0;
+endmodule
+
+
+module mux32_2x1 (
+    input  [31:0] in_0, in_1,
+    input         control,
+    output [31:0] out
+);
+    assign out = control ? in_1 : in_0;
+endmodule
+
+
+module sign_extend (
+    input  [15:0] immediate,
+    output [31:0] extended_immediate
+);
+    assign extended_immediate = {{16{immediate[15]}}, immediate};
+endmodule
+
+
+module add_4 (
+    input  [31:0] pc,
+    output [31:0] next_pc
+);
+    assign next_pc = pc + 4;
+endmodule
+
+
+module add_shifter (
+    input  [31:0] next_pc, extended_immediate,
+    output [31:0] branch_next_pc
+);
+    assign branch_next_pc = next_pc + (extended_immediate << 2);
+endmodule
+
+
+module mips (
+    input clock
+);
+
+    // Program Counter
+    reg [31:0] pc = 32'b0;
+    wire [31:0] pc_next;
+
+    // Instruction and Immediate
+    wire [31:0] instruction;
+    wire [31:0] extended_immediate;
+
+    // Control Signals
+    wire sig_reg_dst, sig_reg_write, sig_alu_src;
+    wire sig_mem_read, sig_mem_write, sig_mem_to_reg, sig_pc_src;
+    wire [2:0] alu_op;
+
+    // Register File Connections
+    wire [31:0] read_reg_1, read_reg_2;
+    wire [4:0]  write_register;
+    wire [31:0] write_data_reg;
+
+    // ALU Connections
+    wire [31:0] alu_rt;
+    wire [31:0] alu_result;
+    wire zero;
+
+    // Memory Connection
+    wire [31:0] read_data;
+
+    // PC Calculation
+    wire [31:0] next_pc;
+    wire [31:0] branch_next_pc;
+
+    // 1. Instruction Memory: fetch instruction from PC
+    instruction_memory instruction_mem (
+        pc,
+        instruction
+    );
+
+    // 2. Control Unit: generate control signals based on opcode and funct
+    control_unit ctrl (
+        instruction[31:26],   // opcode
+        instruction[5:0],     // funct
+        zero,
+        sig_reg_dst,
+        sig_reg_write,
+        sig_alu_src,
+        sig_mem_read,
+        sig_mem_write,
+        sig_mem_to_reg,
+        sig_pc_src,
+        alu_op
+    );
+
+    // 3. Sign Extend: extend 16-bit immediate to 32-bit signed
+    sign_extend sext (
+        instruction[15:0],
+        extended_immediate
+    );
+
+    // 4. Register File: read and write registers
+    registers regs (
+        clock,
+        instruction[25:21],   // rs
+        instruction[20:16],   // rt
+        write_register,       // destination reg
+        write_data_reg,       // data to write
+        sig_reg_write,
+        read_reg_1,
+        read_reg_2
+    );
+
+    // 5. ALU: perform arithmetic/logical operations
+    ALU alu (
+        read_reg_1,
+        alu_rt,
+        alu_op,
+        alu_result,
+        zero
+    );
+
+    // 6. Data Memory: read/write from memory
+    data_memory data_mem (
+        clock,
+        alu_result,       // address (also used as write addr)
+        alu_result,
+        read_reg_2,       // data to write
+        sig_mem_read,
+        sig_mem_write,
+        read_data         // data read from memory
+    );
+
+    // 7. MUXes
+
+    // Select destination register (rt vs rd)
+    mux5_2x1 mux_1 (
+        instruction[20:16],
+        instruction[15:11],
+        sig_reg_dst,
+        write_register
+    );
+
+    // Select second ALU operand (register vs immediate)
+    mux32_2x1 mux_2 (
+        read_reg_2,
+        extended_immediate,
+        sig_alu_src,
+        alu_rt
+    );
+
+    // Select data to write back to register (ALU result vs memory read)
+    mux32_2x1 mux_3 (
+        alu_result,
+        read_data,
+        sig_mem_to_reg,
+        write_data_reg
+    );
+
+    // Select next PC (sequential vs branch target)
+    mux32_2x1 mux_4 (
+        next_pc,
+        branch_next_pc,
+        sig_pc_src,
+        pc_next
+    );
+
+    // 8. PC Adders
+
+    // Compute PC + 4
+    add_4 pc_adder (
+        pc,
+        next_pc
+    );
+
+    // Compute PC + 4 + (immediate << 2) for branch
+    add_shifter branch_pc_adder (
+        next_pc,
+        extended_immediate,
+        branch_next_pc
+    );
+
+    // 9. PC Register Update
+    always @(posedge clock) begin
+        pc <= pc_next;
+    end
+
 endmodule
